@@ -11,14 +11,26 @@ from random import randint, uniform, seed
 seed(10)
 
 def get_base(bm, verts, number=12):
+    distance_function = lambda i : 0.1
+    
+    theta_bound = (-math.pi,math.pi)
+    phi_bound = (-math.pi/8, math.pi/8)
+    
+    
     vertices_base = []
     for i in range(number):
         ret = bmesh.ops.extrude_vert_indiv(bm, verts=verts)
 
         for v in ret['verts']:
-            v.co += Vector([uniform(-0.05,0.05),uniform(-0.05,0.05),-uniform(0.05,0.1)])
+            x = distance_function(i) * math.sin(uniform(*phi_bound)) * math.cos(uniform(*theta_bound))
+            y = distance_function(i) * math.sin(uniform(*phi_bound)) * math.sin(uniform(*theta_bound))
+            z = - distance_function(i) * math.cos(uniform(*phi_bound))
+            
+            v.co += Vector([x,y,z])
         verts = ret['verts']
         vertices_base.append(verts[0])
+        
+    print(vertices_base)
     return vertices_base
 
 def generate_next(bm, verts, generation=1, base_angle=0.2):
@@ -97,6 +109,6 @@ bpy.context.object.modifiers["Subdivision"].levels = 4
 bpy.ops.object.editmode_toggle()
 bpy.ops.mesh.select_all(action='SELECT')
 
-bpy.ops.transform.skin_resize(value=(0.01,0.01,0.01), orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), orient_matrix_type='GLOBAL', mirror=True, use_proportional_edit=True, proportional_edit_falloff='SMOOTH', proportional_size=0.564474, use_proportional_connected=False, use_proportional_projected=False)
+bpy.ops.transform.skin_resize(value=(0.02,0.02,0.02), orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), orient_matrix_type='GLOBAL', mirror=True, use_proportional_edit=True, proportional_edit_falloff='SMOOTH', proportional_size=0.564474, use_proportional_connected=False, use_proportional_projected=False)
 
 bpy.ops.object.editmode_toggle()
