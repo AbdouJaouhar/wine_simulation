@@ -13,8 +13,8 @@ class GrapeLSystem:
     m: int = 5
     ns: List[int] = field(default_factory=list)
     l: float = 1
-    rl: float = 1
-    rr: float = 0.75
+    rl: float = 1.2
+    rr: float = 0.9
     alpha: float = 45
     position_base = (0,0,0) 
     phi = 0
@@ -75,6 +75,9 @@ class GrapeLSystem:
     
     def draw_segment(self, state, length):
         verts, phi, theta = state
+        phi = math.radians(phi)
+        theta = theta
+        
         ret = bmesh.ops.extrude_vert_indiv(self.mesh_branch, verts=verts)
         
         x = length * math.sin(phi) * math.cos(theta)
@@ -85,7 +88,7 @@ class GrapeLSystem:
         
         return ret['verts'], phi, theta
         
-    def draw(self, speed=1000):
+    def draw(self):
         cursor = 0
         stack = []
         self.mesh_branch = bmesh.new()
@@ -94,16 +97,17 @@ class GrapeLSystem:
         phi = self.phi
         theta = self.theta
         
+        self.finitions = []
+        
         while cursor < len(self.instructions):
             char = self.instructions[cursor]
             temp_string = self.instructions[cursor:]
             
             if char == "F":
                 param = int(float(temp_string[2:].split(')')[0]))
-                self.draw_segment([verts, phi, theta], param)
-            elif char == "/":
-                stack.append([verts, self.phi, self.theta])
-                pass
+                verts, phi, theta = self.draw_segment([verts, phi, theta], param)
+            elif char == "/" and self.instructions[cursor+1] != "(":
+                theta += 45
             elif char == "[":
                 stack.append([verts, phi, theta])
             elif char == "]":
@@ -114,18 +118,44 @@ class GrapeLSystem:
                 phi+=param
             elif char == "-":
                 param = int(float(temp_string[2:].split(')')[0]))
-                theta+=param
+                phi-=param
             elif char == "S":
-                pass
+                self.finitions = [*self.finitions, *verts]
 
             cursor += 1
 
         pass
     
+    
+    def draw_bairies(self):
+        grappes = []
+        for i, vert in enumerate(self.finitions):
+            mesh = bpy.data.meshes.new(f'baie_{vert.index}')
+
+
+            # Construct the bmesh sphere and assign it to the blender mesh.
+            bm_temp = bmesh.new()
+            bmesh.ops.create_uvsphere(bm_temp, u_segments=32, v_segments=16, diameter=0.5)
+            print(self.mesh_branch.verts)
+            bmesh.ops.translate(
+                bm_temp,
+                verts=bm_temp.verts,
+                vec=vert.co.to_tuple()
+            )
+            
+            bm_temp.to_mesh(mesh)
+            bm_temp.free()
+
+            obj_grappe_temp = bpy.data.objects.new(f'baie_{i}', mesh)
+            bpy.context.collection.objects.link(obj_grappe_temp)
+            obj_grappe_temp.select_set(True)
+            bpy.ops.object.shade_smooth()
+            grappes.append(obj_grappe_temp)
+            
     def show(self):
         me = bpy.data.meshes.new("branches")
         self.mesh_branch.to_mesh(me)
-        self.mesh_branch.free()
+#        self.mesh_branch.free()
 
 
         # Add the mesh to the scene
@@ -144,7 +174,11 @@ class GrapeLSystem:
         size = 0.1
         bpy.ops.transform.skin_resize(value=(size, size , size), orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), orient_matrix_type='GLOBAL', mirror=True, use_proportional_edit=True, proportional_edit_falloff='SMOOTH', proportional_size=0.564474, use_proportional_connected=False, use_proportional_projected=False)
 
-grappe = GrapeLSystem(m=3, ns=[1, 2])
+        bpy.ops.object.editmode_toggle()
+
+ns = [2, 2, 2, 4,3,4,5,6,8]
+grappe = GrapeLSystem(m=9, ns=ns[::-1])
 grappe.iterate(n_iter=10)
 grappe.draw()
+grappe.draw_bairies()
 grappe.show()
