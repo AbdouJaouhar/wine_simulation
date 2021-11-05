@@ -13,6 +13,7 @@ class Turtle:
     transform = mathutils.Matrix.Identity(4)
     
     def rotate(self, angle, vector):
+#        angle = math.radians(angle)
         self.transform = operator.matmul(self.transform, mathutils.Matrix.Rotation(angle, 4, vector))
             
 
@@ -99,18 +100,17 @@ class GrapeLSystem:
                 i = int(float(next_string[3:].split(',')[0]))
 
                 if string[k+1] != "e" and string[k+1] != "p":
-                    j = int((next_string[3:].split(',')[1]))
+                    j = float((next_string[3:].split(',')[1]).replace(" ", ""))
 
                 if string[k+1] == "r":
                     if i == 1:
                         new_comand = f"Ae({int(j*self.rl)})"
                     if i > 1:
-                        print(i)
-                        new_comand = f"F({j})[//Ar({i-1}, {int(j*self.rl)})][+({self.alpha})Af({self.ns[i-2]}, {int(j*self.rl)})]"
+                        new_comand = f"F({j})[//Ar({i-1}, {j*self.rl})][+({self.alpha})Af({self.ns[i-2]}, {j*self.rl})]"
 
                 if string[k+1] == "f":
                     if i > 1:
-                        new_comand = f"F({j})[//Af({i-1}, {int(j*self.rl)})][+({self.alpha})Ae({j*self.rl})]"
+                        new_comand = f"F({j})[//Af({i-1}, {j*self.rl})][+({self.alpha})Ae({j*self.rl})]"
                     if i == 1:
                         new_comand = f"Ae({int(j*self.rl)})"
 
@@ -150,6 +150,7 @@ class GrapeLSystem:
         turtle = Turtle()
         drawer = Drawer(start_point=(0,0,0))
         turtle.rotate_x(math.pi)
+        vertice = drawer.vertices[0]
         
         
         self.finitions = []
@@ -159,25 +160,24 @@ class GrapeLSystem:
             temp_string = self.instructions[cursor:]
             
             if char == "F":
-                param = int(float(temp_string[2:].split(')')[0]))
+                param = float(temp_string[2:].split(')')[0])
                 turtle.forward(param)
+                vertice_old = vertice
                 vertice = drawer.forward(turtle, param)
+                drawer.connect(vertice_old, vertice)
             elif char == "/" and self.instructions[cursor+1] != "(":
                 turtle.rotate_z(math.pi/2)
             elif char == "[":
                 drawer.push_state(vertice, turtle)
             elif char == "]":
                 vertice, turtle = drawer.pop_state()
-                print(turtle.transform)
             elif char == "+":
-                param = int(float(temp_string[2:].split(')')[0]))
+                param = float(temp_string[2:].split(')')[0])
                 turtle.rotate_x(math.radians(param))
             elif char == "-":
-                param = int(float(temp_string[2:].split(')')[0]))
+                param = float(temp_string[2:].split(')')[0])
                 turtle.rotate_x(math.radians(-param))
             elif char == "S":
-                param = int(float(temp_string[2:].split(')')[0]))
-                turtle.forward(param)
                 vertice = drawer.forward(turtle, param)
                 self.finitions = [*self.finitions, vertice]
 
@@ -186,33 +186,8 @@ class GrapeLSystem:
         drawer.exec()
 
     
-    def draw_bairies(self):
-        grappes = []
-        for i, vert in enumerate(self.finitions):
-            mesh = bpy.data.meshes.new(f'baie_{vert.index}')
 
-
-            # Construct the bmesh sphere and assign it to the blender mesh.
-            bm_temp = bmesh.new()
-            bmesh.ops.create_uvsphere(bm_temp, u_segments=32, v_segments=16, diameter=0.5)
-            print(self.mesh_branch.verts)
-            bmesh.ops.translate(
-                bm_temp,
-                verts=bm_temp.verts,
-                vec=vert.co.to_tuple()
-            )
-            
-            bm_temp.to_mesh(mesh)
-            bm_temp.free()
-
-            obj_grappe_temp = bpy.data.objects.new(f'baie_{i}', mesh)
-            bpy.context.collection.objects.link(obj_grappe_temp)
-            obj_grappe_temp.select_set(True)
-            bpy.ops.object.shade_smooth()
-            grappes.append(obj_grappe_temp)
-            
-
-ns = [3,3,3,4,5,5,7,8,9]
-grappe = GrapeLSystem(m=9, ns=ns, l=1)
+ns = [1,2]
+grappe = GrapeLSystem(m=3, ns=ns, l=1)
 grappe.iterate(n_iter=10)
 grappe.draw()
