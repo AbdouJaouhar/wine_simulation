@@ -7,7 +7,272 @@ import mathutils
 from mathutils import Vector
 from random import randint, uniform, seed
 
+#https://github.com/krljg/lsystem/
 
+class Pen():
+    def __init__(self):
+        self.radius = 0.1
+        self.material = None
+
+    def get_radius(self):
+        return self.radius
+
+    def set_radius(self, radius):
+        self.radius = radius
+
+    def get_material(self):
+        return self.material
+
+    def set_material(self, material):
+        self.material = material
+
+    def start(self, trans_mat):
+        pass
+
+    def move_and_draw(self, trans_mat):
+        pass
+
+    def move(self, trans_mat):
+        pass
+
+    def end(self):
+        """Return a mesh"""
+        return None
+
+    def start_branch(self):
+        pass
+
+    def end_branch(self):
+        return None
+
+    def start_face(self):
+        pass
+
+    def end_face(self):
+        return None
+
+class BMeshPen(Pen):
+    def __init__(self):
+        Pen.__init__(self)
+        self.bmesh = None
+        self.last_vertices = None
+        self.material = None
+        self.stack = []
+
+    def set_material(self, material):
+        self.material = material
+
+    def reset(self):
+        self.bmesh = bmesh.new()
+        self.stack = []
+
+    def start(self, trans_mat):
+        self.reset()
+        self.last_vertices = self.create_vertices(trans_mat)
+
+    def move_and_draw(self, trans_mat):
+        new_vertices = self.create_vertices(trans_mat)
+        new_faces = self.connect(self.last_vertices, new_vertices)
+        self.last_vertices = new_vertices
+
+        if self.material is not None:
+            for f in new_faces:
+                f.material_index = self.material
+
+    def move(self, trans_mat):
+        self.last_vertices = self.create_vertices(trans_mat)
+
+    def end(self):
+        """Return a mesh"""
+        if not self.stack:
+            if self.bmesh is None:  # end() can be called before start()
+                return None
+            mesh = bpy.data.meshes.new("lsystem.bmesh")
+            self.bmesh.to_mesh(mesh)
+            return mesh
+
+        self.last_vertices, self.radius, self.material = self.stack.pop()
+        return None
+
+    def start_branch(self):
+        self.stack.append((self.last_vertices, self.radius, self.material))
+
+    def end_branch(self):
+        return self.end()
+
+    def create_vertices(self, trans_mat):
+        raise Exception("create_vertices not implemented")
+
+    def connect(self, last_vertices, new_vertices):
+        raise Exception("connect not implemented")
+
+class BLinePen(BMeshPen):
+    def __init__(self):
+        BMeshPen.__init__(self)
+
+    def create_vertices(self, trans_mat):
+        v1 = self.bmesh.verts.new(util.matmul(trans_mat, mathutils.Vector((self.radius, 0, 0))))
+        v2 = self.bmesh.verts.new(util.matmul(trans_mat, mathutils.Vector((-self.radius, 0, 0))))
+        return [v1, v2]
+
+    def connect(self, last_vertices, new_vertices):
+        return [self.bmesh.faces.new((last_vertices[0], last_vertices[1], new_vertices[1], new_vertices[0]))]
+    
+class BlObject:
+    def __init__(self, radius, name="lsystem"):
+        self.stack = []
+        self.radius = radius
+        self.pen = pen.CylPen(4)
+        self.materials = []
+        self.bmesh = bmesh.new()
+        self.mesh = bpy.data.meshes.new(name)
+        self.object = bpy.data.objects.new(self.mesh.name, self.mesh)
+        self.last_indices = []
+
+    def set_pen(self, name, transform):
+        self.end_mesh_part()
+
+        if name == "line":
+            self.pen = BLinePen()
+        else:
+            print("No pen with name '"+name+"' found")
+            return
+        self.start_new_mesh_part(transform)
+
+    def set_material(self, name):
+        if name not in self.materials:
+            self.materials.append(name)
+            mat = bpy.data.materials.get(name)
+            self.mesh.materials.append(mat)
+        index = self.materials.index(name)
+        self.pen.set_material(index)
+
+    def scale_radius(self, scale):
+        self.pen.set_radius(self.pen.get_radius() * scale)
+
+    def set_radius(self, radius):
+        self.pen.set_radius(radius)
+
+    def get_radius(self):
+        return self.pen.get_radius()
+
+    def push(self, transform):
+        t = (transform, self.pen)
+        self.pen.start_branch()
+        self.stack.append(t)
+
+    def pop(self):
+        if not self.stack:
+            return None
+        transform, pen = self.stack.pop()
+        if self.pen is not pen:
+            self.end_mesh_part()
+        self.pen = pen
+        mesh = self.pen.end_branch()
+        if mesh is not None:
+            self.bmesh.from_mesh(mesh)
+        return transform
+
+    def is_new_mesh_part(self):
+        return self.last_indices is None
+
+    def start_new_mesh_part(self, transform):
+        self.end_mesh_part()
+        self.pen.set_radius(self.radius)
+        self.pen.start(transform)
+
+    def end_mesh_part(self):
+        # pen.end() will return a mesh if it's really the end and not just a branch closing
+        new_mesh = self.pen.end()
+        if new_mesh is not None:
+            self.bmesh.from_mesh(new_mesh)
+
+    def get_last_indices(self):
+        return self.last_indices
+
+    def set_last_indices(self, indices):
+        self.last_indices = indices
+
+    def finish(self, context):
+        # print("turtle.finish")
+        # print(str(self.pen))
+        new_mesh = self.pen.end()
+        if new_mesh is not None:
+            self.bmesh.from_mesh(new_mesh)
+
+        # me = bpy.data.meshes.new("lsystem")
+        self.bmesh.to_mesh(self.mesh)
+        base = util.link(context, self.object)
+
+        return self.object, base
+
+    def move_and_draw(self, transform):
+        self.pen.move_and_draw(transform)
+
+    def move(self, transform):
+        self.pen.move(transform)
+
+
+@dataclass
+class Turtle:
+    seed: int
+    radius = 0.1
+    angle = math.radians(25.7)
+    length = 1.0
+    expansion = 1.1
+    shrinkage = 0.9
+    fat = 1.2
+    slinkage = 0.8
+    transform = mathutils.Matrix.Identity(4)
+    direction = (0.0, 0.0, 1.0)
+    object_stack = []
+    seed = seed
+    tropism_vector = (0.0, 0.0, 0.0)
+    tropism_force = 0
+    sym_func_map = {}
+    
+    def set_radius(self, radius):
+        self.radius = radius
+
+    def set_angle(self, angle):
+        self.angle = angle
+
+    def set_length(self, length):
+        self.length = length
+
+    def set_expansion(self, expansion):
+        self.expansion = expansion
+
+    def set_shrinkage(self, shrinkage):
+        self.shrinkage = shrinkage
+
+    def set_fat(self, fat):
+        self.fat = fat
+
+    def set_slinkage(self, slinkage):
+        self.slinkage = slinkage
+
+    def set_direction(self, direction):
+        self.direction = direction
+        up = mathutils.Vector((0.0, 0.0, 1.0))
+        old_direction = util.matmul(self.transform, up)
+        quat = old_direction.rotation_difference(direction)
+        rot_matrix = quat.to_matrix().to_4x4()
+        self.transform = util.matmul(self.transform, rot_matrix)
+
+    def rotate(self, angle, vector):
+        self.transform = util.matmul(self.transform, mathutils.Matrix.Rotation(angle, 4, vector))
+
+    def rotate_y(self, angle):
+        self.rotate(angle, mathutils.Vector((0.0, 1.0, 0.0)))
+
+    def rotate_x(self, angle):
+        self.rotate(angle, mathutils.Vector((1.0, 0.0, 0.0)))
+
+    def rotate_z(self, angle):
+        self.rotate(angle, mathutils.Vector((0.0, 0.0, 1.0)))
+    
+      
 @dataclass
 class GrapeLSystem:
     m: int = 5
@@ -107,7 +372,7 @@ class GrapeLSystem:
                 param = int(float(temp_string[2:].split(')')[0]))
                 verts, phi, theta = self.draw_segment([verts, phi, theta], param)
             elif char == "/" and self.instructions[cursor+1] != "(":
-                theta += 45
+                theta += 90
             elif char == "[":
                 stack.append([verts, phi, theta])
             elif char == "]":
@@ -176,9 +441,9 @@ class GrapeLSystem:
 
         bpy.ops.object.editmode_toggle()
 
-ns = [2, 2, 2, 4,3,4,5,6,8]
-grappe = GrapeLSystem(m=9, ns=ns[::-1])
+ns = [2,1]
+grappe = GrapeLSystem(m=3, ns=ns[::-1])
 grappe.iterate(n_iter=10)
 grappe.draw()
-grappe.draw_bairies()
+#grappe.draw_bairies()
 grappe.show()
