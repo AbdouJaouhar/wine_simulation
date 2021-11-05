@@ -6,8 +6,9 @@ import math
 import mathutils
 from mathutils import Vector
 from random import randint, uniform, seed
+from time import time
+# https://github.com/krljg/lsystem/
 
-#https://github.com/krljg/lsystem/
 
 class Pen():
     def __init__(self):
@@ -50,6 +51,7 @@ class Pen():
 
     def end_face(self):
         return None
+
 
 class BMeshPen(Pen):
     def __init__(self):
@@ -106,18 +108,22 @@ class BMeshPen(Pen):
     def connect(self, last_vertices, new_vertices):
         raise Exception("connect not implemented")
 
+
 class BLinePen(BMeshPen):
     def __init__(self):
         BMeshPen.__init__(self)
 
     def create_vertices(self, trans_mat):
-        v1 = self.bmesh.verts.new(util.matmul(trans_mat, mathutils.Vector((self.radius, 0, 0))))
-        v2 = self.bmesh.verts.new(util.matmul(trans_mat, mathutils.Vector((-self.radius, 0, 0))))
+        v1 = self.bmesh.verts.new(util.matmul(
+            trans_mat, mathutils.Vector((self.radius, 0, 0))))
+        v2 = self.bmesh.verts.new(util.matmul(
+            trans_mat, mathutils.Vector((-self.radius, 0, 0))))
         return [v1, v2]
 
     def connect(self, last_vertices, new_vertices):
         return [self.bmesh.faces.new((last_vertices[0], last_vertices[1], new_vertices[1], new_vertices[0]))]
-    
+
+
 class BlObject:
     def __init__(self, radius, name="lsystem"):
         self.stack = []
@@ -230,7 +236,7 @@ class Turtle:
     tropism_vector = (0.0, 0.0, 0.0)
     tropism_force = 0
     sym_func_map = {}
-    
+
     def set_radius(self, radius):
         self.radius = radius
 
@@ -261,7 +267,8 @@ class Turtle:
         self.transform = util.matmul(self.transform, rot_matrix)
 
     def rotate(self, angle, vector):
-        self.transform = util.matmul(self.transform, mathutils.Matrix.Rotation(angle, 4, vector))
+        self.transform = util.matmul(
+            self.transform, mathutils.Matrix.Rotation(angle, 4, vector))
 
     def rotate_y(self, angle):
         self.rotate(angle, mathutils.Vector((0.0, 1.0, 0.0)))
@@ -271,8 +278,8 @@ class Turtle:
 
     def rotate_z(self, angle):
         self.rotate(angle, mathutils.Vector((0.0, 0.0, 1.0)))
-    
-      
+
+
 @dataclass
 class GrapeLSystem:
     m: int = 5
@@ -281,7 +288,7 @@ class GrapeLSystem:
     rl: float = 1.2
     rr: float = 0.9
     alpha: float = 45
-    position_base = (0,0,0) 
+    position_base = (0, 0, 0)
     phi = 0
     theta = 0
 
@@ -337,40 +344,43 @@ class GrapeLSystem:
         for iteration in range(n_iter):
             omega = self.extract_rules(omega)
         self.instructions = omega
-    
+
     def draw_segment(self, state, length):
         verts, phi, theta = state
         phi = math.radians(phi)
         theta = theta
-        
+
         ret = bmesh.ops.extrude_vert_indiv(self.mesh_branch, verts=verts)
-        
+
         x = length * math.sin(phi) * math.cos(theta)
         y = length * math.sin(phi) * math.sin(theta)
         z = - length * math.cos(phi)
-        
-        ret['verts'][0].co += Vector([x,y,z])
-        
+
+        ret['verts'][0].co += Vector([x, y, z])
+
         return ret['verts'], phi, theta
-        
+
     def draw(self):
         cursor = 0
         stack = []
         self.mesh_branch = bmesh.new()
         verts = [self.mesh_branch.verts.new(self.position_base)]
-        
+
         phi = self.phi
         theta = self.theta
-        
+
         self.finitions = []
-        
+        internode = 0
+        number_berries = 0
         while cursor < len(self.instructions):
             char = self.instructions[cursor]
             temp_string = self.instructions[cursor:]
-            
+
             if char == "F":
                 param = int(float(temp_string[2:].split(')')[0]))
-                verts, phi, theta = self.draw_segment([verts, phi, theta], param)
+                verts, phi, theta = self.draw_segment(
+                    [verts, phi, theta], param)
+                internode += 1
             elif char == "/" and self.instructions[cursor+1] != "(":
                 theta += 90
             elif char == "[":
@@ -380,34 +390,35 @@ class GrapeLSystem:
 
             elif char == "+":
                 param = int(float(temp_string[2:].split(')')[0]))
-                phi+=param
+                phi += param
             elif char == "-":
                 param = int(float(temp_string[2:].split(')')[0]))
-                phi-=param
+                phi -= param
             elif char == "S":
                 self.finitions = [*self.finitions, *verts]
+                number_berries += 1
 
             cursor += 1
-
+        print(f"Number internode : {internode}")
+        print(f"Number berries : {number_berries}")
         pass
-    
-    
+
     def draw_bairies(self):
         grappes = []
         for i, vert in enumerate(self.finitions):
             mesh = bpy.data.meshes.new(f'baie_{vert.index}')
 
-
             # Construct the bmesh sphere and assign it to the blender mesh.
             bm_temp = bmesh.new()
-            bmesh.ops.create_uvsphere(bm_temp, u_segments=32, v_segments=16, diameter=0.5)
+            bmesh.ops.create_uvsphere(
+                bm_temp, u_segments=32, v_segments=16, diameter=0.5)
             print(self.mesh_branch.verts)
             bmesh.ops.translate(
                 bm_temp,
                 verts=bm_temp.verts,
                 vec=vert.co.to_tuple()
             )
-            
+
             bm_temp.to_mesh(mesh)
             bm_temp.free()
 
@@ -416,12 +427,11 @@ class GrapeLSystem:
             obj_grappe_temp.select_set(True)
             bpy.ops.object.shade_smooth()
             grappes.append(obj_grappe_temp)
-            
+
     def show(self):
         me = bpy.data.meshes.new("branches")
         self.mesh_branch.to_mesh(me)
 #        self.mesh_branch.free()
-
 
         # Add the mesh to the scene
         obj = bpy.data.objects.new("branches", me)
@@ -433,17 +443,21 @@ class GrapeLSystem:
         bpy.ops.object.modifier_add(type='SKIN')
         bpy.ops.object.modifier_add(type='SUBSURF')
         bpy.context.object.modifiers["Subdivision"].levels = 4
-        
+
         bpy.ops.object.editmode_toggle()
         bpy.ops.mesh.select_all(action='SELECT')
         size = 0.1
-        bpy.ops.transform.skin_resize(value=(size, size , size), orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), orient_matrix_type='GLOBAL', mirror=True, use_proportional_edit=True, proportional_edit_falloff='SMOOTH', proportional_size=0.564474, use_proportional_connected=False, use_proportional_projected=False)
+        bpy.ops.transform.skin_resize(value=(size, size, size), orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), orient_matrix_type='GLOBAL', mirror=True,
+                                      use_proportional_edit=True, proportional_edit_falloff='SMOOTH', proportional_size=0.564474, use_proportional_connected=False, use_proportional_projected=False)
 
         bpy.ops.object.editmode_toggle()
 
-ns = [2,1]
+
+ns = [2, 1]
 grappe = GrapeLSystem(m=3, ns=ns[::-1])
+t0 = time()
 grappe.iterate(n_iter=10)
 grappe.draw()
-#grappe.draw_bairies()
+# grappe.draw_bairies()
+print(f"Time : {round((time()-t0)*1000)}ms")
 grappe.show()
